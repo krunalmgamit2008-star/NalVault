@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -127,6 +128,7 @@ fun VaultScreen() {
     var category by remember { mutableStateOf("") }
     var attempts by rememberSaveable { mutableStateOf(0) }
     var showAll by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     var sessionPassword by remember { mutableStateOf("") }
     // Auto-lock after a minute in the background instead of the instant lock, which made the
     // picker and a quick switch to another app lock the vault for nothing.
@@ -260,6 +262,10 @@ fun VaultScreen() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Nal Vault", style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = { showSettings = true }) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                }
             }
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -611,6 +617,12 @@ fun VaultScreen() {
                         tint = Color.White
                     )
                 }
+            }
+        }
+
+        if (showSettings) {
+            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                VaultSettings(onBack = { showSettings = false })
             }
         }
 
@@ -1008,5 +1020,46 @@ private fun FolderTile(
                 Text("$count", style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+}
+
+
+@Composable
+private fun VaultSettings(onBack: () -> Unit) {
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text("Settings", style = MaterialTheme.typography.headlineSmall)
+        }
+        Spacer(Modifier.height(12.dp))
+        SettingRow("Nal Vault", "Version 1.0")
+        SettingRow("Contact", "krunal.m.gamitl3o8@zohomail.in") {
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_SENDTO).apply {
+                        data = Uri.parse("mailto:krunal.m.gamitl3o8@zohomail.in")
+                    }
+                )
+            }
+        }
+        SettingRow("Encryption", "AES-256-GCM - PBKDF2 120,000 iterations")
+        SettingRow("Auto-lock", "After 1 minute in the background")
+        SettingRow("Privacy", "No network, no analytics, no cloud")
+    }
+}
+
+@Composable
+private fun SettingRow(title: String, subtitle: String, onClick: () -> Unit = {}) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 12.dp)
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall)
     }
 }
