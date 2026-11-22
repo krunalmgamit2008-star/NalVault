@@ -472,27 +472,11 @@ fun VaultScreen() {
                             Spacer(Modifier.height(6.dp))
                         }
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            label = { Text("Search") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(8.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                when {
-                                    atRoot -> "Open a folder to see its files"
-                                    visible.isEmpty() -> "Nothing here yet"
-                                    else -> "${visible.size} file(s), AES-256 encrypted"
-                                },
-                                style = MaterialTheme.typography.bodySmall
-                            )
                             Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(
                                 onClick = { showNewFolder = true },
@@ -697,6 +681,27 @@ fun VaultScreen() {
             Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                 VaultSettings(
                     onBack = { showSettings = false },
+                    folders = contents.folders,
+                    onAddFile = {
+                        external = true
+                        picker.launch(arrayOf("*/*"))
+                        showSettings = false
+                    },
+                    onNewFolder = {
+                        showNewFolder = true
+                        showSettings = false
+                    },
+                    onDeleteFolder = { name ->
+                        val current = key
+                        if (current != null) {
+                            scope.launch {
+                                contents = withContext(Dispatchers.IO) {
+                                    VaultCrypto.removeFolder(context, current, name)
+                                }
+                                status = "Folder \"$name\" deleted, its files moved to the vault root"
+                            }
+                        }
+                    },
                     fingerprintAvailable = BiometricUnlock.isAvailable(context),
                     fingerprintEnabled = BiometricUnlock.isEnabled(context),
                     onEnableFingerprint = {
@@ -740,16 +745,6 @@ fun VaultScreen() {
             }
         }
 
-        if (key != null) {
-            FloatingActionButton(
-                onClick = { external = true; picker.launch(arrayOf("*/*")) },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 24.dp, bottom = 96.dp)
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add files")
-            }
-        }
     }
 
     if (showNewFolder) {
@@ -1107,7 +1102,6 @@ private fun HomeTiles(
     tiles.add(HomeTile("Videos", Icons.Filled.Videocam, Color(0xFFBF5AF2)) { onCategory("Videos") })
     tiles.add(HomeTile("Music", Icons.Filled.MusicNote, Color(0xFFE0A800)) { onCategory("Audio") })
     tiles.add(HomeTile("My files", Icons.Filled.Folder, Color(0xFF32ADE6), onFiles))
-    tiles.add(HomeTile("Add app", Icons.Filled.Android, Color(0xFF64D2FF), onAddApp))
     tiles.add(HomeTile("Settings", Icons.Filled.Settings, Color(0xFFFF8FA3), onSettings))
     folders.forEach { name ->
         tiles.add(HomeTile(name, Icons.Filled.Folder, Color(0xFF5E5CE6)) { onOpenFolder(name) })
@@ -1127,11 +1121,6 @@ private fun HomeTiles(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            "Nal Vault",
-            style = MaterialTheme.typography.displaySmall,
-            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
-        )
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0B0B0F)),
             shape = RoundedCornerShape(24.dp),
@@ -1217,6 +1206,10 @@ private fun Pill(text: String) {
 @Composable
 private fun VaultSettings(
     onBack: () -> Unit,
+    folders: List<String>,
+    onAddFile: () -> Unit,
+    onNewFolder: () -> Unit,
+    onDeleteFolder: (String) -> Unit,
     fingerprintAvailable: Boolean,
     fingerprintEnabled: Boolean,
     onEnableFingerprint: () -> Unit,
@@ -1249,6 +1242,37 @@ private fun VaultSettings(
             }
         } else {
             SettingRow("Fingerprint unlock", "No fingerprint enrolled on this phone")
+        }
+        SettingRow("Add file", "Pick a file and add it to the vault", onAddFile)
+        SettingRow("New folder", "Create a new folder", onNewFolder)
+        if (folders.isNotEmpty()) {
+            Text(
+                "Delete folder",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            folders.forEach { name ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Folder,
+                        contentDescription = null,
+                        tint = iconPaletteColor(name),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(name, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { onDeleteFolder(name) }) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "Delete folder",
+                            tint = Color(0xFFFF453A)
+                        )
+                    }
+                }
+            }
         }
         SettingRow("Encryption", "AES-256-GCM - PBKDF2 120,000 iterations")
         SettingRow("Auto-lock", "After 1 minute in the background")
