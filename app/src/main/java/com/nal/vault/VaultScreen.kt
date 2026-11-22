@@ -48,6 +48,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,6 +95,9 @@ fun VaultScreen() {
     // True while the file picker or another app is on screen: the app goes to the background for
     // that, and locking then would drop the key the picker is about to need.
     var external by remember { mutableStateOf(false) }
+    // A file picked while the process was killed is remembered and added once the vault is
+    // unlocked again, instead of being lost with the key.
+    var pendingUri by rememberSaveable { mutableStateOf<String?>(null) }
     var preview by remember { mutableStateOf<Bitmap?>(null) }
     // Decrypted copies written for viewing are deleted as soon as they are no longer needed.
     val tempFiles = remember { mutableListOf<File>() }
@@ -143,17 +147,7 @@ fun VaultScreen() {
         }
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val current = key
-        external = false
-        if (uri == null) {
-            status = "No file was chosen"
-            return@rememberLauncherForActivityResult
-        }
-        if (current == null) {
-            error = "The vault locked itself, unlock it again"
-            return@rememberLauncherForActivityResult
-        }
+    fun addFromUri(current: SecretKey, uri: Uri) {
         busy = true
         error = null
         status = null
@@ -175,6 +169,29 @@ fun VaultScreen() {
                 error = it.message ?: it.javaClass.simpleName
             }
         }
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val current = key
+        external = false
+        if (uri == null) {
+            status = "No file was chosen"
+            return@rememberLauncherForActivityResult
+        }
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        if (current == null) {
+            // The picker took the app out of the foreground and the process was killed, so the
+            // key is gone. Keep the pick and finish the job after the next unlock.
+            pendingUri = uri.toString()
+            status = "Unlock the vault again to finish adding this file"
+            return@rememberLauncherForActivityResult
+        }
+        addFromUri(current, uri)
     }
 
     val visible = if (folder.isEmpty()) {
@@ -234,6 +251,11 @@ fun VaultScreen() {
                                     password = ""
                                     contents = withContext(Dispatchers.IO) {
                                         VaultCrypto.contents(context, unlocked)
+                                    }
+                                    val pending = pendingUri
+                                    if (pending != null) {
+                                        pendingUri = null
+                                        runCatching { addFromUri(unlocked, Uri.parse(pending)) }
                                     }
                                 }
                             }
