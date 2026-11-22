@@ -429,7 +429,7 @@ fun VaultScreen() {
                             }
                         )
                         Spacer(Modifier.height(10.dp))
-                        if (folder.isEmpty()) {
+                        if (atRoot) {
                             FolderTiles(
                                 folders = contents.folders,
                                 items = contents.items,
@@ -438,7 +438,7 @@ fun VaultScreen() {
                                 onAll = { showAll = true }
                             )
                             Spacer(Modifier.height(10.dp))
-                        } else if (folder.isNotEmpty() || showAll || category.isNotEmpty()) {
+                        } else {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
