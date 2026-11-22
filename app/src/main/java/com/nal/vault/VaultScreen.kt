@@ -304,10 +304,6 @@ fun VaultScreen() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Nal Vault", style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = { showSettings = true }) {
-                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                }
             }
 
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
