@@ -56,6 +56,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -89,9 +91,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.crypto.SecretKey
 
 /**
@@ -409,6 +415,8 @@ fun VaultScreen() {
                     else -> {
                         if (atRoot) {
                             HomeTiles(
+                                folders = contents.folders,
+                                items = contents.items,
                                 onCamera = { launchCamera() },
                                 onCategory = {
                                     category = it
@@ -424,15 +432,8 @@ fun VaultScreen() {
                                 onAddApp = {
                                     external = true
                                     picker.launch(arrayOf("application/vnd.android.package-archive"))
-                                }
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            FolderTiles(
-                                folders = contents.folders,
-                                items = contents.items,
-                                onOpen = { folder = it },
-                                onNewFolder = { showNewFolder = true },
-                                onAll = { showAll = true }
+                                },
+                                onOpenFolder = { folder = it }
                             )
                             Spacer(Modifier.height(10.dp))
                         } else {
@@ -1040,6 +1041,228 @@ private const val LOCK_AFTER_MS = 60_000L
 /** Wrong passwords tolerated before the vault wipes itself. */
 private const val MAX_ATTEMPTS = 10
 
+
+@Composable
+private fun FolderTile(
+    label: String,
+    count: Int?,
+    colour: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier.clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Folder,
+                contentDescription = null,
+                tint = colour,
+                modifier = Modifier.size(26.dp)
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            if (count != null) {
+                Text("$count", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun VaultSettings(
+    onBack: () -> Unit,
+    fingerprintAvailable: Boolean,
+    fingerprintEnabled: Boolean,
+    onEnableFingerprint: () -> Unit,
+    onDisableFingerprint: () -> Unit
+) {
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text("Settings", style = MaterialTheme.typography.headlineSmall)
+        }
+        Spacer(Modifier.height(12.dp))
+        SettingRow("Nal Vault", "Version 1.0")
+        SettingRow("Contact", "krunal.m.gamitl3o8@zohomail.in") {
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_SENDTO).apply {
+                        data = Uri.parse("mailto:krunal.m.gamitl3o8@zohomail.in")
+                    }
+                )
+            }
+        }
+        if (fingerprintAvailable) {
+            if (fingerprintEnabled) {
+                SettingRow("Fingerprint unlock", "On - tap to disable", onDisableFingerprint)
+            } else {
+                SettingRow("Fingerprint unlock", "Off - tap to enable", onEnableFingerprint)
+            }
+        } else {
+            SettingRow("Fingerprint unlock", "No fingerprint enrolled on this phone")
+        }
+        SettingRow("Encryption", "AES-256-GCM - PBKDF2 120,000 iterations")
+        SettingRow("Auto-lock", "After 1 minute in the background")
+        SettingRow("Privacy", "No network, no analytics, no cloud")
+    }
+}
+
+@Composable
+private fun SettingRow(title: String, subtitle: String, onClick: () -> Unit = {}) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 12.dp)
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+
+private data class HomeTile(
+    val label: String,
+    val icon: ImageVector,
+    val colour: Color,
+    val onClick: () -> Unit
+)
+
+@Composable
+private fun HomeTiles(
+    folders: List<String>,
+    items: List<VaultItem>,
+    onCamera: () -> Unit,
+    onCategory: (String) -> Unit,
+    onFiles: () -> Unit,
+    onSettings: () -> Unit,
+    onAddApp: () -> Unit,
+    onOpenFolder: (String) -> Unit
+) {
+    val tiles = buildList {
+        add(HomeTile("Camera", Icons.Filled.PhotoCamera, Color(0xFF30D158), onCamera))
+        add(HomeTile("Photos", Icons.Filled.Image, Color(0xFF0A84FF)) { onCategory("Photos") })
+        add(HomeTile("Videos", Icons.Filled.Videocam, Color(0xFFBF5AF2)) { onCategory("Videos") })
+        add(HomeTile("Music", Icons.Filled.MusicNote, Color(0xFFE0A800)) { onCategory("Audio") })
+        add(HomeTile("My files", Icons.Filled.Folder, Color(0xFF32ADE6), onFiles))
+        add(HomeTile("Add app", Icons.Filled.Android, Color(0xFF64D2FF), onAddApp))
+        add(HomeTile("Settings", Icons.Filled.Settings, Color(0xFFFF8FA3), onSettings))
+        folders.forEach { name ->
+            add(HomeTile(name, Icons.Filled.Folder, Color(0xFF5E5CE6)) { onOpenFolder(name) })
+        }
+    }
+
+    val clock = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+    val dayFormat = remember { SimpleDateFormat("EEE, dd MMM", Locale.getDefault()) }
+    var timeText by remember { mutableStateOf(clock.format(Date())) }
+    var dateText by remember { mutableStateOf(dayFormat.format(Date())) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = Date()
+            timeText = clock.format(now)
+            dateText = dayFormat.format(now)
+            delay(1000)
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Nal Vault",
+            style = MaterialTheme.typography.displaySmall,
+            modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)
+        )
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0B0B0F)),
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(120.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color.White),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.logo),
+                            contentDescription = "Nal Vault",
+                            modifier = Modifier.size(96.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Pill(timeText)
+                        Spacer(Modifier.height(10.dp))
+                        Pill(dateText)
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                tiles.chunked(4).forEach { row ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                    ) {
+                        row.forEach { tile ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(tile.colour)
+                                        .clickable { tile.onClick() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = tile.icon,
+                                        contentDescription = tile.label,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    tile.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Pill(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color(0xFF3A3A3C))
+            .padding(horizontal = 28.dp, vertical = 12.dp)
+    ) {
+        Text(text, color = Color.White, style = MaterialTheme.typography.titleMedium)
+    }
+}
 
 @Composable
 private fun FolderTile(
