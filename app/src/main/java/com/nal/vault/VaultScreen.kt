@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -123,6 +124,9 @@ fun VaultScreen() {
     var playing by remember { mutableStateOf<File?>(null) }
     var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
     var category by remember { mutableStateOf("") }
+    // Auto-lock after a minute in the background instead of the instant lock, which made the
+    // picker and a quick switch to another app lock the vault for nothing.
+    var backgroundedAt by rememberSaveable { mutableStateOf(0L) }
     var folderName by remember { mutableStateOf("") }
 
     // No screenshots and no screen recording while the vault is on screen: the window is marked
@@ -144,14 +148,20 @@ fun VaultScreen() {
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP && !external) {
-                key = null
-                password = ""
-                confirm = ""
-                contents = VaultContents()
-                folder = ""
-                status = null
-                error = null
-                clearTemp()
+                backgroundedAt = System.currentTimeMillis()
+            }
+            if (event == Lifecycle.Event.ON_START && !external) {
+                val since = backgroundedAt
+                if (key != null && since > 0L && System.currentTimeMillis() - since > LOCK_AFTER_MS) {
+                    key = null
+                    password = ""
+                    confirm = ""
+                    contents = VaultContents()
+                    folder = ""
+                    status = null
+                    error = null
+                    clearTemp()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -210,6 +220,25 @@ fun VaultScreen() {
         }
         addFromUri(current, uri)
     }
+
+    val galleryPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            val current = key
+            external = false
+            if (uri == null) return@rememberLauncherForActivityResult
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            if (current == null) {
+                pendingUri = uri.toString()
+                status = "Unlock the vault again to finish adding this file"
+                return@rememberLauncherForActivityResult
+            }
+            addFromUri(current, uri)
+        }
 
     val visible = contents.items
         .filter { folder.isEmpty() || it.folder == folder }
@@ -284,43 +313,35 @@ fun VaultScreen() {
                             onSelect = { category = if (category == it) "" else it }
                         )
                         Spacer(Modifier.height(10.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            item {
-                                FilterChip(
-                                    selected = folder.isEmpty(),
-                                    onClick = { folder = "" },
-                                    label = { Text("All") }
+                        if (folder.isEmpty()) {
+                            FolderTiles(
+                                folders = contents.folders,
+                                items = contents.items,
+                                onOpen = { folder = it },
+                                onNewFolder = { showNewFolder = true }
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = { folder = "" }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back"
+                                    )
+                                }
+                                Text(folder, style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.width(8.dp))
+                                Icon(
+                                    Icons.Filled.Folder,
+                                    contentDescription = null,
+                                    tint = iconPaletteColor(folder),
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
-                            items(contents.folders, key = { it }) { name ->
-                                FilterChip(
-                                    selected = folder == name,
-                                    onClick = { folder = name },
-                                    label = { Text(name) },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Filled.Folder,
-                                            contentDescription = null,
-                                            tint = iconPaletteColor(name),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                )
-                            }
-                            item {
-                                FilterChip(
-                                    selected = false,
-                                    onClick = { showNewFolder = true },
-                                    label = { Text("+ Folder") },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Filled.CreateNewFolder,
-                                            contentDescription = null,
-                                            tint = Color(0xFFFF9F0A)
-                                        )
-                                    }
-                                )
-                            }
+                            Spacer(Modifier.height(6.dp))
                         }
                         Spacer(Modifier.height(8.dp))
                         Row(
@@ -335,6 +356,15 @@ fun VaultScreen() {
                                 },
                                 style = MaterialTheme.typography.bodySmall
                             )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(
+                                onClick = {
+                                    external = true
+                                    galleryPicker.launch(arrayOf("image/*", "video/*"))
+                                },
+                                enabled = !busy
+                            ) { Text("Gallery") }
+                            Spacer(Modifier.width(4.dp))
                             Button(
                                 onClick = { external = true; picker.launch(arrayOf("*/*")) },
                                 enabled = !busy
@@ -346,6 +376,7 @@ fun VaultScreen() {
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(if (busy) "Adding..." else "Add file")
+                            }
                             }
                         }
                         Spacer(Modifier.height(4.dp))
@@ -746,3 +777,78 @@ private fun categoryOf(name: String): String {
         else -> "Documents"
     }
 }
+
+
+@Composable
+private fun FolderTiles(
+    folders: List<String>,
+    items: List<VaultItem>,
+    onOpen: (String) -> Unit,
+    onNewFolder: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        folders.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { name ->
+                    val count = items.count { it.folder == name }
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onOpen(name) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Folder,
+                                contentDescription = null,
+                                tint = iconPaletteColor(name),
+                                modifier = Modifier.size(26.dp)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                name,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1
+                            )
+                            Text("$count", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onNewFolder() },
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CreateNewFolder,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9F0A),
+                        modifier = Modifier.size(26.dp)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text("New folder", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            repeat(2) { Spacer(Modifier.weight(1f)) }
+        }
+    }
+}
+
+/** How long the vault may stay in the background before it locks itself. */
+private const val LOCK_AFTER_MS = 60_000L
