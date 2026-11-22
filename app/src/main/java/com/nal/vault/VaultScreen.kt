@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
@@ -72,6 +73,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.fragment.app.FragmentActivity
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -247,6 +249,39 @@ fun VaultScreen() {
         }
 
     val atRoot = folder.isEmpty() && !showAll && category.isEmpty()
+    var cameraUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+            external = false
+            val uri = cameraUri
+            if (!ok || uri == null) {
+                status = "No photo was taken"
+                return@rememberLauncherForActivityResult
+            }
+            val current = key
+            if (current == null) {
+                pendingUri = uri.toString()
+                status = "Unlock the vault again to finish adding the photo"
+            } else {
+                addFromUri(current, uri)
+            }
+        }
+
+    fun launchCamera() {
+        runCatching {
+            val dir = File(context.cacheDir, "vault").apply { mkdirs() }
+            val file = File(dir, "camera_" + System.currentTimeMillis() + ".jpg")
+            val uri = FileProvider.getUriForFile(
+                context,
+                context.packageName + ".fileprovider",
+                file
+            )
+            cameraUri = uri
+            external = true
+            cameraLauncher.launch(uri)
+        }.onFailure { error = "The camera could not be opened" }
+    }
+
     val visible = if (atRoot) {
         emptyList()
     } else {
@@ -368,13 +403,22 @@ fun VaultScreen() {
                     )
 
                     else -> {
-                        CategoryTiles(
-                            items = contents.items,
-                            selected = category,
-                            onSelect = {
+                        HomeTiles(
+                            onCamera = { launchCamera() },
+                            onCategory = {
                                 category = it
                                 folder = ""
                                 showAll = false
+                            },
+                            onFiles = {
+                                showAll = true
+                                category = ""
+                                folder = ""
+                            },
+                            onSettings = { showSettings = true },
+                            onAddApp = {
+                                external = true
+                                picker.launch(arrayOf("application/vnd.android.package-archive"))
                             }
                         )
                         Spacer(Modifier.height(10.dp))
@@ -1076,5 +1120,63 @@ private fun SettingRow(title: String, subtitle: String, onClick: () -> Unit = {}
     ) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
         Text(subtitle, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+
+private data class HomeTile(
+    val label: String,
+    val icon: ImageVector,
+    val colour: Color,
+    val onClick: () -> Unit
+)
+
+@Composable
+private fun HomeTiles(
+    onCamera: () -> Unit,
+    onCategory: (String) -> Unit,
+    onFiles: () -> Unit,
+    onSettings: () -> Unit,
+    onAddApp: () -> Unit
+) {
+    val tiles = listOf(
+        HomeTile("Camera", Icons.Filled.PhotoCamera, Color(0xFFFF375F), onCamera),
+        HomeTile("Photos", Icons.Filled.Image, Color(0xFF0A84FF)) { onCategory("Photos") },
+        HomeTile("Videos", Icons.Filled.Videocam, Color(0xFF7C3AED)) { onCategory("Videos") },
+        HomeTile("Music", Icons.Filled.MusicNote, Color(0xFFFF9F0A)) { onCategory("Audio") },
+        HomeTile("My files", Icons.Filled.Folder, Color(0xFF32ADE6), onFiles),
+        HomeTile("Settings", Icons.Filled.Settings, Color(0xFF8E8E93), onSettings),
+        HomeTile("Add app", Icons.Filled.Android, Color(0xFF30D158), onAddApp)
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        tiles.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { tile ->
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { tile.onClick() },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = tile.icon,
+                                contentDescription = null,
+                                tint = tile.colour,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(tile.label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                        }
+                    }
+                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
     }
 }
