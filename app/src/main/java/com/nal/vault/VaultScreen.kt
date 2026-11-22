@@ -1040,62 +1040,6 @@ private const val LOCK_AFTER_MS = 60_000L
 
 /** Wrong passwords tolerated before the vault wipes itself. */
 private const val MAX_ATTEMPTS = 10
-
-
-
-
-
-
-
-    onCamera: () -> Unit,
-    onCategory: (String) -> Unit,
-    onFiles: () -> Unit,
-    onSettings: () -> Unit,
-    onAddApp: () -> Unit
-) {
-    val tiles = listOf(
-        HomeTile("Camera", Icons.Filled.PhotoCamera, Color(0xFFFF375F), onCamera),
-        HomeTile("Photos", Icons.Filled.Image, Color(0xFF0A84FF)) { onCategory("Photos") },
-        HomeTile("Videos", Icons.Filled.Videocam, Color(0xFF7C3AED)) { onCategory("Videos") },
-        HomeTile("Music", Icons.Filled.MusicNote, Color(0xFFFF9F0A)) { onCategory("Audio") },
-        HomeTile("My files", Icons.Filled.Folder, Color(0xFF32ADE6), onFiles),
-        HomeTile("Settings", Icons.Filled.Settings, Color(0xFF8E8E93), onSettings),
-        HomeTile("Add app", Icons.Filled.Android, Color(0xFF30D158), onAddApp)
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        tiles.chunked(3).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { tile ->
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { tile.onClick() },
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = tile.icon,
-                                contentDescription = null,
-                                tint = tile.colour,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(tile.label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                        }
-                    }
-                }
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-
 /** The glyph a file gets in the list, picked from what the file is. */
 private fun iconFor(name: String): ImageVector = when (categoryOf(name)) {
     "Photos" -> Icons.Filled.Image
