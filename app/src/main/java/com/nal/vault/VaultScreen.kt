@@ -1042,95 +1042,111 @@ private const val LOCK_AFTER_MS = 60_000L
 private const val MAX_ATTEMPTS = 10
 
 
-@Composable
-private fun FolderTile(
-    label: String,
-    count: Int?,
-    colour: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
+
+
+
+
+
+    onCamera: () -> Unit,
+    onCategory: (String) -> Unit,
+    onFiles: () -> Unit,
+    onSettings: () -> Unit,
+    onAddApp: () -> Unit
 ) {
-    Card(
-        modifier = modifier.clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Folder,
-                contentDescription = null,
-                tint = colour,
-                modifier = Modifier.size(26.dp)
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-            if (count != null) {
-                Text("$count", style = MaterialTheme.typography.bodySmall)
+    val tiles = listOf(
+        HomeTile("Camera", Icons.Filled.PhotoCamera, Color(0xFFFF375F), onCamera),
+        HomeTile("Photos", Icons.Filled.Image, Color(0xFF0A84FF)) { onCategory("Photos") },
+        HomeTile("Videos", Icons.Filled.Videocam, Color(0xFF7C3AED)) { onCategory("Videos") },
+        HomeTile("Music", Icons.Filled.MusicNote, Color(0xFFFF9F0A)) { onCategory("Audio") },
+        HomeTile("My files", Icons.Filled.Folder, Color(0xFF32ADE6), onFiles),
+        HomeTile("Settings", Icons.Filled.Settings, Color(0xFF8E8E93), onSettings),
+        HomeTile("Add app", Icons.Filled.Android, Color(0xFF30D158), onAddApp)
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        tiles.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { tile ->
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { tile.onClick() },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = tile.icon,
+                                contentDescription = null,
+                                tint = tile.colour,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(tile.label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                        }
+                    }
+                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
 
 
-@Composable
-private fun VaultSettings(
-    onBack: () -> Unit,
-    fingerprintAvailable: Boolean,
-    fingerprintEnabled: Boolean,
-    onEnableFingerprint: () -> Unit,
-    onDisableFingerprint: () -> Unit
-) {
-    val context = LocalContext.current
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-            Text("Settings", style = MaterialTheme.typography.headlineSmall)
-        }
-        Spacer(Modifier.height(12.dp))
-        SettingRow("Nal Vault", "Version 1.0")
-        SettingRow("Contact", "krunal.m.gamitl3o8@zohomail.in") {
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_SENDTO).apply {
-                        data = Uri.parse("mailto:krunal.m.gamitl3o8@zohomail.in")
-                    }
-                )
-            }
-        }
-        if (fingerprintAvailable) {
-            if (fingerprintEnabled) {
-                SettingRow("Fingerprint unlock", "On - tap to disable", onDisableFingerprint)
-            } else {
-                SettingRow("Fingerprint unlock", "Off - tap to enable", onEnableFingerprint)
+/** The glyph a file gets in the list, picked from what the file is. */
+private fun iconFor(name: String): ImageVector = when (categoryOf(name)) {
+    "Photos" -> Icons.Filled.Image
+    "Videos" -> Icons.Filled.Videocam
+    "Audio" -> Icons.Filled.MusicNote
+    "APKs" -> Icons.Filled.Android
+    "Archives" -> Icons.Filled.FolderZip
+    else -> Icons.Filled.Description
+}
+
+/** Its colour, so a long list reads at a glance. */
+private fun colourFor(name: String): Color = when (categoryOf(name)) {
+    "Photos" -> Color(0xFF0A84FF)
+    "Videos" -> Color(0xFF7C3AED)
+    "Audio" -> Color(0xFFFF375F)
+    "APKs" -> Color(0xFF30D158)
+    "Archives" -> Color(0xFFAC8E68)
+    else -> Color(0xFF32ADE6)
+}
+
+
+/** A small preview of an encrypted photo or video, made from a temporary decrypted copy. */
+private fun makeThumb(context: Context, key: SecretKey, item: VaultItem): Bitmap? {
+    val file = decryptToCache(context, key, item)
+    return try {
+        if (categoryOf(item.name) == "Videos") {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(file.absolutePath)
+                retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            } finally {
+                runCatching { retriever.release() }
             }
         } else {
-            SettingRow("Fingerprint unlock", "No fingerprint enrolled on this phone")
+            val options = BitmapFactory.Options().apply { inSampleSize = 4 }
+            BitmapFactory.decodeFile(file.absolutePath, options)
         }
-        SettingRow("Encryption", "AES-256-GCM - PBKDF2 120,000 iterations")
-        SettingRow("Auto-lock", "After 1 minute in the background")
-        SettingRow("Privacy", "No network, no analytics, no cloud")
+    } finally {
+        runCatching { file.delete() }
     }
 }
 
-@Composable
-private fun SettingRow(title: String, subtitle: String, onClick: () -> Unit = {}) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 12.dp)
-    ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge)
-        Text(subtitle, style = MaterialTheme.typography.bodySmall)
-    }
-}
 
+private fun Context.findActivity(): Activity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return current as? Activity
+}
 
 private data class HomeTile(
     val label: String,
@@ -1150,17 +1166,16 @@ private fun HomeTiles(
     onAddApp: () -> Unit,
     onOpenFolder: (String) -> Unit
 ) {
-    val tiles = buildList {
-        add(HomeTile("Camera", Icons.Filled.PhotoCamera, Color(0xFF30D158), onCamera))
-        add(HomeTile("Photos", Icons.Filled.Image, Color(0xFF0A84FF)) { onCategory("Photos") })
-        add(HomeTile("Videos", Icons.Filled.Videocam, Color(0xFFBF5AF2)) { onCategory("Videos") })
-        add(HomeTile("Music", Icons.Filled.MusicNote, Color(0xFFE0A800)) { onCategory("Audio") })
-        add(HomeTile("My files", Icons.Filled.Folder, Color(0xFF32ADE6), onFiles))
-        add(HomeTile("Add app", Icons.Filled.Android, Color(0xFF64D2FF), onAddApp))
-        add(HomeTile("Settings", Icons.Filled.Settings, Color(0xFFFF8FA3), onSettings))
-        folders.forEach { name ->
-            add(HomeTile(name, Icons.Filled.Folder, Color(0xFF5E5CE6)) { onOpenFolder(name) })
-        }
+    val tiles = ArrayList<HomeTile>()
+    tiles.add(HomeTile("Camera", Icons.Filled.PhotoCamera, Color(0xFF30D158), onCamera))
+    tiles.add(HomeTile("Photos", Icons.Filled.Image, Color(0xFF0A84FF)) { onCategory("Photos") })
+    tiles.add(HomeTile("Videos", Icons.Filled.Videocam, Color(0xFFBF5AF2)) { onCategory("Videos") })
+    tiles.add(HomeTile("Music", Icons.Filled.MusicNote, Color(0xFFE0A800)) { onCategory("Audio") })
+    tiles.add(HomeTile("My files", Icons.Filled.Folder, Color(0xFF32ADE6), onFiles))
+    tiles.add(HomeTile("Add app", Icons.Filled.Android, Color(0xFF64D2FF), onAddApp))
+    tiles.add(HomeTile("Settings", Icons.Filled.Settings, Color(0xFFFF8FA3), onSettings))
+    folders.forEach { name ->
+        tiles.add(HomeTile(name, Icons.Filled.Folder, Color(0xFF5E5CE6)) { onOpenFolder(name) })
     }
 
     val clock = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
@@ -1265,40 +1280,6 @@ private fun Pill(text: String) {
 }
 
 @Composable
-private fun FolderTile(
-    label: String,
-    count: Int?,
-    colour: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = modifier.clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Folder,
-                contentDescription = null,
-                tint = colour,
-                modifier = Modifier.size(26.dp)
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-            if (count != null) {
-                Text("$count", style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
-
-
-@Composable
 private fun VaultSettings(
     onBack: () -> Unit,
     fingerprintAvailable: Boolean,
@@ -1350,106 +1331,5 @@ private fun SettingRow(title: String, subtitle: String, onClick: () -> Unit = {}
     ) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
         Text(subtitle, style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-
-private data class HomeTile(
-    val label: String,
-    val icon: ImageVector,
-    val colour: Color,
-    val onClick: () -> Unit
-)
-
-@Composable
-private fun HomeTiles(
-    onCamera: () -> Unit,
-    onCategory: (String) -> Unit,
-    onFiles: () -> Unit,
-    onSettings: () -> Unit,
-    onAddApp: () -> Unit
-) {
-    val tiles = listOf(
-        HomeTile("Camera", Icons.Filled.PhotoCamera, Color(0xFFFF375F), onCamera),
-        HomeTile("Photos", Icons.Filled.Image, Color(0xFF0A84FF)) { onCategory("Photos") },
-        HomeTile("Videos", Icons.Filled.Videocam, Color(0xFF7C3AED)) { onCategory("Videos") },
-        HomeTile("Music", Icons.Filled.MusicNote, Color(0xFFFF9F0A)) { onCategory("Audio") },
-        HomeTile("My files", Icons.Filled.Folder, Color(0xFF32ADE6), onFiles),
-        HomeTile("Settings", Icons.Filled.Settings, Color(0xFF8E8E93), onSettings),
-        HomeTile("Add app", Icons.Filled.Android, Color(0xFF30D158), onAddApp)
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        tiles.chunked(3).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { tile ->
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { tile.onClick() },
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = tile.icon,
-                                contentDescription = null,
-                                tint = tile.colour,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(tile.label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                        }
-                    }
-                }
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-
-/** The glyph a file gets in the list, picked from what the file is. */
-private fun iconFor(name: String): ImageVector = when (categoryOf(name)) {
-    "Photos" -> Icons.Filled.Image
-    "Videos" -> Icons.Filled.Videocam
-    "Audio" -> Icons.Filled.MusicNote
-    "APKs" -> Icons.Filled.Android
-    "Archives" -> Icons.Filled.FolderZip
-    else -> Icons.Filled.Description
-}
-
-/** Its colour, so a long list reads at a glance. */
-private fun colourFor(name: String): Color = when (categoryOf(name)) {
-    "Photos" -> Color(0xFF0A84FF)
-    "Videos" -> Color(0xFF7C3AED)
-    "Audio" -> Color(0xFFFF375F)
-    "APKs" -> Color(0xFF30D158)
-    "Archives" -> Color(0xFFAC8E68)
-    else -> Color(0xFF32ADE6)
-}
-
-
-/** A small preview of an encrypted photo or video, made from a temporary decrypted copy. */
-private fun makeThumb(context: Context, key: SecretKey, item: VaultItem): Bitmap? {
-    val file = decryptToCache(context, key, item)
-    return try {
-        if (categoryOf(item.name) == "Videos") {
-            val retriever = MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(file.absolutePath)
-                retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-            } finally {
-                runCatching { retriever.release() }
-            }
-        } else {
-            val options = BitmapFactory.Options().apply { inSampleSize = 4 }
-            BitmapFactory.decodeFile(file.absolutePath, options)
-        }
-    } finally {
-        runCatching { file.delete() }
     }
 }
