@@ -244,7 +244,7 @@ fun VaultScreen() {
             addFromUri(current, uri)
         }
 
-    val atRoot = folder.isEmpty() && !showAll
+    val atRoot = folder.isEmpty() && !showAll && category.isEmpty()
     val visible = if (atRoot) {
         emptyList()
     } else {
@@ -365,7 +365,11 @@ fun VaultScreen() {
                         CategoryTiles(
                             items = contents.items,
                             selected = category,
-                            onSelect = { category = if (category == it) "" else it }
+                            onSelect = {
+                                category = it
+                                folder = ""
+                                showAll = false
+                            }
                         )
                         Spacer(Modifier.height(10.dp))
                         if (folder.isEmpty()) {
@@ -377,26 +381,36 @@ fun VaultScreen() {
                                 onAll = { showAll = true }
                             )
                             Spacer(Modifier.height(10.dp))
-                        } else if (folder.isNotEmpty() || showAll) {
+                        } else if (folder.isNotEmpty() || showAll || category.isNotEmpty()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(onClick = { folder = ""; showAll = false }) {
+                                IconButton(onClick = { folder = ""; showAll = false; category = "" }) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.ArrowBack,
                                         contentDescription = "Back"
                                     )
                                 }
                                 Text(
-                                    if (folder.isEmpty()) "All files" else folder,
+                                    when {
+                                        folder.isNotEmpty() -> folder
+                                        category.isNotEmpty() -> category
+                                        else -> "All files"
+                                    },
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Icon(
                                     Icons.Filled.Folder,
                                     contentDescription = null,
-                                    tint = iconPaletteColor(if (folder.isEmpty()) "all" else folder),
+                                    tint = iconPaletteColor(
+                                        when {
+                                            folder.isNotEmpty() -> folder
+                                            category.isNotEmpty() -> category
+                                            else -> "all"
+                                        }
+                                    ),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
