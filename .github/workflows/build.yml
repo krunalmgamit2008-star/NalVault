@@ -25,3 +25,5 @@ jobs:
         with:
           name: nal-vault-apk
           path: app/build/outputs/apk/debug/*.apk
+
+# trigger rescan
