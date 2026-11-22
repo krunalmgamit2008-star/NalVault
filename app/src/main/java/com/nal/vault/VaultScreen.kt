@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -275,7 +277,15 @@ fun VaultScreen() {
                                 FilterChip(
                                     selected = folder == name,
                                     onClick = { folder = name },
-                                    label = { Text(name) }
+                                    label = { Text(name) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Folder,
+                                            contentDescription = null,
+                                            tint = iconPaletteColor(name),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 )
                             }
                             item {
@@ -286,7 +296,8 @@ fun VaultScreen() {
                                     leadingIcon = {
                                         Icon(
                                             Icons.Filled.CreateNewFolder,
-                                            contentDescription = null
+                                            contentDescription = null,
+                                            tint = Color(0xFFFF9F0A)
                                         )
                                     }
                                 )
@@ -309,7 +320,11 @@ fun VaultScreen() {
                                 onClick = { external = true; picker.launch(arrayOf("*/*")) },
                                 enabled = !busy
                             ) {
-                                Icon(Icons.Filled.Add, contentDescription = null)
+                                Icon(
+                                    Icons.Filled.Add,
+                                    contentDescription = null,
+                                    tint = Color(0xFF0A84FF)
+                                )
                                 Spacer(Modifier.width(6.dp))
                                 Text(if (busy) "Adding..." else "Add file")
                             }
@@ -396,7 +411,11 @@ fun VaultScreen() {
                                             }
                                         }
                                     ) {
-                                        Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "Delete",
+                                            tint = Color(0xFFFF453A)
+                                        )
                                     }
                                 }
                             }
