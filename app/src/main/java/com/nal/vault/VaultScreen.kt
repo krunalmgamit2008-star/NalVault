@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
@@ -58,6 +59,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +70,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -131,6 +135,8 @@ fun VaultScreen() {
     var attempts by rememberSaveable { mutableStateOf(0) }
     var showAll by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val thumbs = remember { mutableStateMapOf<String, Bitmap>() }
     var sessionPassword by remember { mutableStateOf("") }
     // Auto-lock after a minute in the background instead of the instant lock, which made the
     // picker and a quick switch to another app lock the vault for nothing.
@@ -288,6 +294,7 @@ fun VaultScreen() {
         contents.items
             .filter { folder.isEmpty() || it.folder == folder }
             .filter { category.isEmpty() || categoryOf(it.name) == category }
+            .filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -467,6 +474,14 @@ fun VaultScreen() {
                             Spacer(Modifier.height(6.dp))
                         }
                         Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            label = { Text("Search") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -514,6 +529,38 @@ fun VaultScreen() {
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    val thumb = thumbs[item.id]
+                                    LaunchedEffect(item.id) {
+                                        val current = key
+                                        if (thumb == null && current != null &&
+                                            (categoryOf(item.name) == "Photos" ||
+                                                categoryOf(item.name) == "Videos")
+                                        ) {
+                                            val bitmap = withContext(Dispatchers.IO) {
+                                                runCatching { makeThumb(context, current, item) }
+                                                    .getOrNull()
+                                            }
+                                            if (bitmap != null) thumbs[item.id] = bitmap
+                                        }
+                                    }
+                                    if (thumb != null) {
+                                        Image(
+                                            bitmap = thumb.asImageBitmap(),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = iconFor(item.name),
+                                            contentDescription = null,
+                                            tint = colourFor(item.name),
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
                                     Column(modifier = Modifier.fillMaxWidth(0.62f)) {
                                         Text(item.name, style = MaterialTheme.typography.bodyLarge)
                                         Text(
@@ -1140,5 +1187,48 @@ private fun HomeTiles(
                 repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
+    }
+}
+
+
+/** The glyph a file gets in the list, picked from what the file is. */
+private fun iconFor(name: String): ImageVector = when (categoryOf(name)) {
+    "Photos" -> Icons.Filled.Image
+    "Videos" -> Icons.Filled.Videocam
+    "Audio" -> Icons.Filled.MusicNote
+    "APKs" -> Icons.Filled.Android
+    "Archives" -> Icons.Filled.FolderZip
+    else -> Icons.Filled.Description
+}
+
+/** Its colour, so a long list reads at a glance. */
+private fun colourFor(name: String): Color = when (categoryOf(name)) {
+    "Photos" -> Color(0xFF0A84FF)
+    "Videos" -> Color(0xFF7C3AED)
+    "Audio" -> Color(0xFFFF375F)
+    "APKs" -> Color(0xFF30D158)
+    "Archives" -> Color(0xFFAC8E68)
+    else -> Color(0xFF32ADE6)
+}
+
+
+/** A small preview of an encrypted photo or video, made from a temporary decrypted copy. */
+private fun makeThumb(context: Context, key: SecretKey, item: VaultItem): Bitmap? {
+    val file = decryptToCache(context, key, item)
+    return try {
+        if (categoryOf(item.name) == "Videos") {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(file.absolutePath)
+                retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            } finally {
+                runCatching { retriever.release() }
+            }
+        } else {
+            val options = BitmapFactory.Options().apply { inSampleSize = 4 }
+            BitmapFactory.decodeFile(file.absolutePath, options)
+        }
+    } finally {
+        runCatching { file.delete() }
     }
 }
