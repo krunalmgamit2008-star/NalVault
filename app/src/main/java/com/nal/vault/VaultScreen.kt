@@ -126,6 +126,7 @@ fun VaultScreen() {
     var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
     var category by remember { mutableStateOf("") }
     var attempts by rememberSaveable { mutableStateOf(0) }
+    var showAll by rememberSaveable { mutableStateOf(false) }
     var sessionPassword by remember { mutableStateOf("") }
     // Auto-lock after a minute in the background instead of the instant lock, which made the
     // picker and a quick switch to another app lock the vault for nothing.
@@ -243,9 +244,14 @@ fun VaultScreen() {
             addFromUri(current, uri)
         }
 
-    val visible = contents.items
-        .filter { folder.isEmpty() || it.folder == folder }
-        .filter { category.isEmpty() || categoryOf(it.name) == category }
+    val atRoot = folder.isEmpty() && !showAll
+    val visible = if (atRoot) {
+        emptyList()
+    } else {
+        contents.items
+            .filter { folder.isEmpty() || it.folder == folder }
+            .filter { category.isEmpty() || categoryOf(it.name) == category }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -367,26 +373,30 @@ fun VaultScreen() {
                                 folders = contents.folders,
                                 items = contents.items,
                                 onOpen = { folder = it },
-                                onNewFolder = { showNewFolder = true }
+                                onNewFolder = { showNewFolder = true },
+                                onAll = { showAll = true }
                             )
                             Spacer(Modifier.height(10.dp))
-                        } else {
+                        } else if (folder.isNotEmpty() || showAll) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(onClick = { folder = "" }) {
+                                IconButton(onClick = { folder = ""; showAll = false }) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.ArrowBack,
                                         contentDescription = "Back"
                                     )
                                 }
-                                Text(folder, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    if (folder.isEmpty()) "All files" else folder,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 Icon(
                                     Icons.Filled.Folder,
                                     contentDescription = null,
-                                    tint = iconPaletteColor(folder),
+                                    tint = iconPaletteColor(if (folder.isEmpty()) "all" else folder),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -400,7 +410,8 @@ fun VaultScreen() {
                         ) {
                             Text(
                                 when {
-                                    visible.isEmpty() -> "Nothing in this folder yet"
+                                    atRoot -> "Open a folder to see its files"
+                                    visible.isEmpty() -> "Nothing here yet"
                                     else -> "${visible.size} file(s), AES-256 encrypted"
                                 },
                                 style = MaterialTheme.typography.bodySmall
@@ -861,9 +872,27 @@ private fun FolderTiles(
     folders: List<String>,
     items: List<VaultItem>,
     onOpen: (String) -> Unit,
-    onNewFolder: () -> Unit
+    onNewFolder: () -> Unit,
+    onAll: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FolderTile(
+                label = "All files",
+                count = items.size,
+                colour = Color(0xFF5E5CE6),
+                modifier = Modifier.weight(1f),
+                onClick = onAll
+            )
+            FolderTile(
+                label = "New folder",
+                count = null,
+                colour = Color(0xFFFF9F0A),
+                modifier = Modifier.weight(1f),
+                onClick = onNewFolder
+            )
+            Spacer(Modifier.weight(1f))
+        }
         folders.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { name ->
@@ -933,3 +962,37 @@ private const val LOCK_AFTER_MS = 60_000L
 
 /** Wrong passwords tolerated before the vault wipes itself. */
 private const val MAX_ATTEMPTS = 10
+
+
+@Composable
+private fun FolderTile(
+    label: String,
+    count: Int?,
+    colour: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = modifier.clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Folder,
+                contentDescription = null,
+                tint = colour,
+                modifier = Modifier.size(26.dp)
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            if (count != null) {
+                Text("$count", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
