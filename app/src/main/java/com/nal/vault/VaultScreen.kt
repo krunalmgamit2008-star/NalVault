@@ -459,26 +459,6 @@ fun VaultScreen() {
                             }
                             }
                         }
-                        if (BiometricUnlock.isAvailable(context)) {
-                            if (BiometricUnlock.isEnabled(context)) {
-                                TextButton(onClick = { BiometricUnlock.disable(context); status = "Fingerprint unlock disabled" }) {
-                                    Text("Disable fingerprint unlock")
-                                }
-                            } else {
-                                TextButton(
-                                    onClick = {
-                                        val activity = context.findActivity() as? FragmentActivity
-                                        if (activity == null || sessionPassword.isEmpty()) {
-                                            error = "Unlock with the password first"
-                                        } else {
-                                            BiometricUnlock.enable(context, activity, sessionPassword) { ok ->
-                                                status = if (ok) "Fingerprint unlock enabled" else "Fingerprint was not set up"
-                                            }
-                                        }
-                                    }
-                                ) { Text("Enable fingerprint unlock") }
-                            }
-                        }
                         Spacer(Modifier.height(4.dp))
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
                             items(visible, key = { it.id }) { item ->
@@ -622,7 +602,27 @@ fun VaultScreen() {
 
         if (showSettings) {
             Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                VaultSettings(onBack = { showSettings = false })
+                VaultSettings(
+                    onBack = { showSettings = false },
+                    fingerprintAvailable = BiometricUnlock.isAvailable(context),
+                    fingerprintEnabled = BiometricUnlock.isEnabled(context),
+                    onEnableFingerprint = {
+                        val activity = context.findActivity() as? FragmentActivity
+                        if (activity == null || sessionPassword.isEmpty()) {
+                            error = "Unlock with the password first"
+                        } else {
+                            BiometricUnlock.enable(context, activity, sessionPassword) { ok ->
+                                status = if (ok) "Fingerprint unlock enabled" else "Fingerprint was not set up"
+                                showSettings = false
+                            }
+                        }
+                    },
+                    onDisableFingerprint = {
+                        BiometricUnlock.disable(context)
+                        status = "Fingerprint unlock disabled"
+                        showSettings = false
+                    }
+                )
             }
         }
 
@@ -1025,7 +1025,13 @@ private fun FolderTile(
 
 
 @Composable
-private fun VaultSettings(onBack: () -> Unit) {
+private fun VaultSettings(
+    onBack: () -> Unit,
+    fingerprintAvailable: Boolean,
+    fingerprintEnabled: Boolean,
+    onEnableFingerprint: () -> Unit,
+    onDisableFingerprint: () -> Unit
+) {
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1044,6 +1050,15 @@ private fun VaultSettings(onBack: () -> Unit) {
                     }
                 )
             }
+        }
+        if (fingerprintAvailable) {
+            if (fingerprintEnabled) {
+                SettingRow("Fingerprint unlock", "On - tap to disable", onDisableFingerprint)
+            } else {
+                SettingRow("Fingerprint unlock", "Off - tap to enable", onEnableFingerprint)
+            }
+        } else {
+            SettingRow("Fingerprint unlock", "No fingerprint enrolled on this phone")
         }
         SettingRow("Encryption", "AES-256-GCM - PBKDF2 120,000 iterations")
         SettingRow("Auto-lock", "After 1 minute in the background")
