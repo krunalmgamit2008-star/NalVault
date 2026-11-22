@@ -407,26 +407,26 @@ fun VaultScreen() {
                     )
 
                     else -> {
-                        HomeTiles(
-                            onCamera = { launchCamera() },
-                            onCategory = {
-                                category = it
-                                folder = ""
-                                showAll = false
-                            },
-                            onFiles = {
-                                showAll = true
-                                category = ""
-                                folder = ""
-                            },
-                            onSettings = { showSettings = true },
-                            onAddApp = {
-                                external = true
-                                picker.launch(arrayOf("application/vnd.android.package-archive"))
-                            }
-                        )
-                        Spacer(Modifier.height(10.dp))
                         if (atRoot) {
+                            HomeTiles(
+                                onCamera = { launchCamera() },
+                                onCategory = {
+                                    category = it
+                                    folder = ""
+                                    showAll = false
+                                },
+                                onFiles = {
+                                    showAll = true
+                                    category = ""
+                                    folder = ""
+                                },
+                                onSettings = { showSettings = true },
+                                onAddApp = {
+                                    external = true
+                                    picker.launch(arrayOf("application/vnd.android.package-archive"))
+                                }
+                            )
+                            Spacer(Modifier.height(10.dp))
                             FolderTiles(
                                 folders = contents.folders,
                                 items = contents.items,
@@ -436,6 +436,7 @@ fun VaultScreen() {
                             )
                             Spacer(Modifier.height(10.dp))
                         } else {
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
