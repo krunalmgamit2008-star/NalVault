@@ -210,6 +210,12 @@ object VaultCrypto {
         save(context, key, contents.copy(items = contents.items.filterNot { it.id == id }))
     }
 
+    /** Deletes every encrypted file and the index. Used by the wrong-password wipe. */
+    fun wipe(context: Context) {
+        vaultDir(context).deleteRecursively()
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().clear().apply()
+    }
+
     fun fileFor(context: Context, id: String): File = File(vaultDir(context), "$id.enc")
 
     private fun ByteArray.toHex(): String =

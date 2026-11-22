@@ -71,6 +71,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.fragment.app.FragmentActivity
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -124,6 +125,8 @@ fun VaultScreen() {
     var playing by remember { mutableStateOf<File?>(null) }
     var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
     var category by remember { mutableStateOf("") }
+    var attempts by rememberSaveable { mutableStateOf(0) }
+    var sessionPassword by remember { mutableStateOf("") }
     // Auto-lock after a minute in the background instead of the instant lock, which made the
     // picker and a quick switch to another app lock the vault for nothing.
     var backgroundedAt by rememberSaveable { mutableStateOf(0L) }
@@ -279,6 +282,39 @@ fun VaultScreen() {
                     key == null -> UnlockVault(
                         password = password,
                         busy = busy,
+                        biometric = BiometricUnlock.isEnabled(context),
+                        onBiometric = {
+                            val activity = context.findActivity() as? FragmentActivity
+                            if (activity == null) {
+                                error = "Fingerprint is not available here"
+                            } else {
+                                BiometricUnlock.unlock(context, activity) { stored ->
+                                    if (stored == null) {
+                                        error = "Fingerprint unlock was cancelled"
+                                    } else {
+                                        password = stored
+                                        error = null
+                                        busy = true
+                                        scope.launch {
+                                            val unlocked = withContext(Dispatchers.Default) {
+                                                VaultCrypto.unlock(context, stored)
+                                            }
+                                            busy = false
+                                            if (unlocked == null) {
+                                                error = "The stored password no longer works"
+                                            } else {
+                                                key = unlocked
+                                                sessionPassword = stored
+                                                password = ""
+                                                contents = withContext(Dispatchers.IO) {
+                                                    VaultCrypto.contents(context, unlocked)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
                         onPassword = { password = it },
                         onUnlock = {
                             busy = true
@@ -289,8 +325,21 @@ fun VaultScreen() {
                                 }
                                 busy = false
                                 if (unlocked == null) {
-                                    error = "Wrong master password"
+                                    attempts += 1
+                                    if (attempts >= MAX_ATTEMPTS) {
+                                        VaultCrypto.wipe(context)
+                                        key = null
+                                        contents = VaultContents()
+                                        configured = false
+                                        attempts = 0
+                                        error = null
+                                        status = "Vault wiped after $MAX_ATTEMPTS wrong passwords"
+                                    } else {
+                                        error = "Wrong master password ($attempts/$MAX_ATTEMPTS)"
+                                    }
                                 } else {
+                                    attempts = 0
+                                    sessionPassword = password
                                     key = unlocked
                                     password = ""
                                     contents = withContext(Dispatchers.IO) {
@@ -377,6 +426,26 @@ fun VaultScreen() {
                                 Spacer(Modifier.width(6.dp))
                                 Text(if (busy) "Adding..." else "Add file")
                             }
+                            }
+                        }
+                        if (BiometricUnlock.isAvailable(context)) {
+                            if (BiometricUnlock.isEnabled(context)) {
+                                TextButton(onClick = { BiometricUnlock.disable(context); status = "Fingerprint unlock disabled" }) {
+                                    Text("Disable fingerprint unlock")
+                                }
+                            } else {
+                                TextButton(
+                                    onClick = {
+                                        val activity = context.findActivity() as? FragmentActivity
+                                        if (activity == null || sessionPassword.isEmpty()) {
+                                            error = "Unlock with the password first"
+                                        } else {
+                                            BiometricUnlock.enable(context, activity, sessionPassword) { ok ->
+                                                status = if (ok) "Fingerprint unlock enabled" else "Fingerprint was not set up"
+                                            }
+                                        }
+                                    }
+                                ) { Text("Enable fingerprint unlock") }
                             }
                         }
                         Spacer(Modifier.height(4.dp))
@@ -632,6 +701,8 @@ private fun SetupVault(
 private fun UnlockVault(
     password: String,
     busy: Boolean,
+    biometric: Boolean,
+    onBiometric: () -> Unit,
     onPassword: (String) -> Unit,
     onUnlock: () -> Unit
 ) {
@@ -654,6 +725,12 @@ private fun UnlockVault(
         enabled = !busy && password.isNotEmpty(),
         modifier = Modifier.fillMaxWidth()
     ) { Text(if (busy) "Checking..." else "Unlock") }
+    if (biometric) {
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onBiometric, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            Text("Unlock with fingerprint")
+        }
+    }
 }
 
 private fun Context.findActivity(): Activity? {
@@ -852,3 +929,7 @@ private fun FolderTiles(
 
 /** How long the vault may stay in the background before it locks itself. */
 private const val LOCK_AFTER_MS = 60_000L
+
+
+/** Wrong passwords tolerated before the vault wipes itself. */
+private const val MAX_ATTEMPTS = 10
