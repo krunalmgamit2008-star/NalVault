@@ -482,6 +482,10 @@ fun VaultScreen() {
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(
+                                onClick = { showNewFolder = true },
+                                enabled = !busy
+                            ) { Text("+ Folder") }
+                            TextButton(
                                 onClick = {
                                     external = true
                                     galleryPicker.launch(arrayOf("image/*", "video/*"))
@@ -946,23 +950,6 @@ private fun FolderTiles(
     onAll: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FolderTile(
-                label = "All files",
-                count = items.size,
-                colour = Color(0xFF5E5CE6),
-                modifier = Modifier.weight(1f),
-                onClick = onAll
-            )
-            FolderTile(
-                label = "New folder",
-                count = null,
-                colour = Color(0xFFFF9F0A),
-                modifier = Modifier.weight(1f),
-                onClick = onNewFolder
-            )
-            Spacer(Modifier.weight(1f))
-        }
         folders.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { name ->
@@ -997,31 +984,6 @@ private fun FolderTiles(
                 }
                 repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onNewFolder() },
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                )
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.CreateNewFolder,
-                        contentDescription = null,
-                        tint = Color(0xFFFF9F0A),
-                        modifier = Modifier.size(26.dp)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text("New folder", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-            repeat(2) { Spacer(Modifier.weight(1f)) }
         }
     }
 }
