@@ -472,38 +472,6 @@ fun VaultScreen() {
                             Spacer(Modifier.height(6.dp))
                         }
                         Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(
-                                onClick = { showNewFolder = true },
-                                enabled = !busy
-                            ) { Text("+ Folder") }
-                            TextButton(
-                                onClick = {
-                                    external = true
-                                    galleryPicker.launch(arrayOf("image/*", "video/*"))
-                                },
-                                enabled = !busy
-                            ) { Text("Gallery") }
-                            Spacer(Modifier.width(4.dp))
-                            Button(
-                                onClick = { external = true; picker.launch(arrayOf("*/*")) },
-                                enabled = !busy
-                            ) {
-                                Icon(
-                                    Icons.Filled.Add,
-                                    contentDescription = null,
-                                    tint = Color(0xFF0A84FF)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(if (busy) "Adding..." else "Add file")
-                            }
-                            }
-                        }
                         Spacer(Modifier.height(4.dp))
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
                             items(visible, key = { it.id }) { item ->
