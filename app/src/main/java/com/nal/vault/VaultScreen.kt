@@ -13,7 +13,7 @@ import android.view.WindowManager
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Image as FImage
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -542,7 +542,7 @@ fun VaultScreen() {
                                         }
                                     }
                                     if (thumb != null) {
-                                        Image(
+                                        FImage(
                                             bitmap = thumb.asImageBitmap(),
                                             contentDescription = null,
                                             contentScale = ContentScale.Crop,
@@ -721,7 +721,7 @@ fun VaultScreen() {
 
         preview?.let { bitmap ->
             Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-                Image(
+                FImage(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
@@ -1154,7 +1154,7 @@ private fun HomeTiles(
                             .background(Color.White),
                         contentAlignment = Alignment.Center
                     ) {
-                        Image(
+                        FImage(
                             painter = painterResource(id = R.drawable.logo),
                             contentDescription = "Nal Vault",
                             modifier = Modifier.size(96.dp)
