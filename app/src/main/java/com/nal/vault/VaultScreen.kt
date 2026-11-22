@@ -10,11 +10,11 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.view.WindowManager
 import android.webkit.MimeTypeMap
-import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,9 +34,17 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -62,6 +70,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
@@ -110,6 +121,8 @@ fun VaultScreen() {
     }
 
     var playing by remember { mutableStateOf<File?>(null) }
+    var exoPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
+    var category by remember { mutableStateOf("") }
     var folderName by remember { mutableStateOf("") }
 
     // No screenshots and no screen recording while the vault is on screen: the window is marked
@@ -120,6 +133,8 @@ fun VaultScreen() {
         window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            runCatching { exoPlayer?.release() }
+            exoPlayer = null
             clearTemp()
         }
     }
@@ -196,11 +211,9 @@ fun VaultScreen() {
         addFromUri(current, uri)
     }
 
-    val visible = if (folder.isEmpty()) {
-        contents.items
-    } else {
-        contents.items.filter { it.folder == folder }
-    }
+    val visible = contents.items
+        .filter { folder.isEmpty() || it.folder == folder }
+        .filter { category.isEmpty() || categoryOf(it.name) == category }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -265,6 +278,12 @@ fun VaultScreen() {
                     )
 
                     else -> {
+                        CategoryTiles(
+                            items = contents.items,
+                            selected = category,
+                            onSelect = { category = if (category == it) "" else it }
+                        )
+                        Spacer(Modifier.height(10.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             item {
                                 FilterChip(
@@ -441,22 +460,21 @@ fun VaultScreen() {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                 AndroidView(
                     factory = { ctx ->
-                        VideoView(ctx).apply {
-                            setOnErrorListener { _, _, _ ->
-                                error = "This format cannot be played on this phone"
-                                playing = null
-                                clearTemp()
-                                true
-                            }
-                            setVideoPath(file.absolutePath)
-                            setOnPreparedListener { it.isLooping = false }
-                            start()
+                        PlayerView(ctx).apply {
+                            val exo = ExoPlayer.Builder(ctx).build()
+                            exo.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+                            exo.prepare()
+                            exo.playWhenReady = true
+                            player = exo
+                            exoPlayer = exo
                         }
                     },
                     modifier = Modifier.fillMaxSize()
                 )
                 IconButton(
                     onClick = {
+                        runCatching { exoPlayer?.release() }
+                        exoPlayer = null
                         playing = null
                         clearTemp()
                     },
@@ -663,4 +681,68 @@ private fun openItem(context: Context, key: SecretKey, item: VaultItem): File {
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
     context.startActivity(intent)
     return out
+}
+
+
+@Composable
+private fun CategoryTiles(items: List<VaultItem>, selected: String, onSelect: (String) -> Unit) {
+    val categories = listOf(
+        Triple("Photos", Icons.Filled.Image, Color(0xFF0A84FF)),
+        Triple("Videos", Icons.Filled.Videocam, Color(0xFF7C3AED)),
+        Triple("Audio", Icons.Filled.MusicNote, Color(0xFFFF9F0A)),
+        Triple("Documents", Icons.Filled.Description, Color(0xFF32ADE6)),
+        Triple("APKs", Icons.Filled.Android, Color(0xFF30D158)),
+        Triple("Archives", Icons.Filled.FolderZip, Color(0xFFAC8E68))
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        categories.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { entry ->
+                    val name = entry.first
+                    val icon = entry.second
+                    val colour = entry.third
+                    val count = items.count { categoryOf(it.name) == name }
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onSelect(name) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selected == name) {
+                                colour.copy(alpha = 0.28f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            }
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = colour,
+                                modifier = Modifier.size(26.dp)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(name, style = MaterialTheme.typography.labelMedium)
+                            Text("$count", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun categoryOf(name: String): String {
+    val extension = name.substringAfterLast('.', "").lowercase()
+    return when (extension) {
+        "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif" -> "Photos"
+        "mp4", "mkv", "webm", "3gp", "mov", "avi", "m4v" -> "Videos"
+        "mp3", "m4a", "aac", "ogg", "opus", "wav", "flac" -> "Audio"
+        "apk" -> "APKs"
+        "zip", "rar", "7z", "tar", "gz" -> "Archives"
+        else -> "Documents"
+    }
 }
