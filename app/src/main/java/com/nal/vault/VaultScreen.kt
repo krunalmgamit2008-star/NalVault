@@ -350,6 +350,10 @@ fun VaultScreen() {
                                             busy = true
                                             scope.launch {
                                                 if (isMedia(item.name)) {
+                                                    // Clear first: the new copy may have the same
+                                                    // name, and deleting it after writing it left the
+                                                    // player pointing at a file that no longer existed.
+                                                    clearTemp()
                                                     val file = withContext(Dispatchers.IO) {
                                                         runCatching {
                                                             decryptToCache(context, current, item)
@@ -358,7 +362,6 @@ fun VaultScreen() {
                                                     if (file == null) {
                                                         error = "This file could not be opened"
                                                     } else {
-                                                        clearTemp()
                                                         tempFiles.add(file)
                                                         playing = file
                                                     }
@@ -439,6 +442,12 @@ fun VaultScreen() {
                 AndroidView(
                     factory = { ctx ->
                         VideoView(ctx).apply {
+                            setOnErrorListener { _, _, _ ->
+                                error = "This format cannot be played on this phone"
+                                playing = null
+                                clearTemp()
+                                true
+                            }
                             setVideoPath(file.absolutePath)
                             setOnPreparedListener { it.isLooping = false }
                             start()
