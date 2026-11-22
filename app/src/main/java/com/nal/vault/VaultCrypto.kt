@@ -216,6 +216,33 @@ object VaultCrypto {
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().clear().apply()
     }
 
+    /** Copies one entry into a folder, encrypted bytes and all. */
+    fun copyInto(context: Context, key: SecretKey, item: VaultItem, folder: String): VaultItem? {
+        val newId = UUID.randomUUID().toString()
+        val source = fileFor(context, item.id)
+        if (!source.exists()) return null
+        val target = File(vaultDir(context), "$newId.enc")
+        source.copyTo(target, overwrite = true)
+        val contents = contents(context, key)
+        val copy = VaultItem(newId, item.name, target.length(), folder)
+        save(context, key, contents.copy(items = contents.items + copy))
+        return copy
+    }
+
+    /** Moves one entry into a folder; the encrypted file itself stays where it is. */
+    fun moveInto(context: Context, key: SecretKey, item: VaultItem, folder: String) {
+        val contents = contents(context, key)
+        save(
+            context,
+            key,
+            contents.copy(
+                items = contents.items.map {
+                    if (it.id == item.id) it.copy(folder = folder) else it
+                }
+            )
+        )
+    }
+
     fun fileFor(context: Context, id: String): File = File(vaultDir(context), "$id.enc")
 
     private fun ByteArray.toHex(): String =
