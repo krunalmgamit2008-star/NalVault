@@ -154,7 +154,7 @@ fun VaultScreen() {
     val view = LocalView.current
     DisposableEffect(view) {
         val window = view.context.findActivity()?.window
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (false) window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             runCatching { exoPlayer?.release() }
@@ -524,7 +524,7 @@ fun VaultScreen() {
                                             val current = key ?: return@Button
                                             busy = true
                                             scope.launch {
-                                                if (isMedia(item.name)) {
+                                                if (false) {  // videos open in the phone player
                                                     // Clear first: the new copy may have the same
                                                     // name, and deleting it after writing it left the
                                                     // player pointing at a file that no longer existed.
