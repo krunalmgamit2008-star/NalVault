@@ -1115,6 +1115,7 @@ private fun HomeTiles(
                         Spacer(Modifier.height(10.dp))
                         Pill(dateText)
                     }
+                    IconButton(onClick=onSettings){Icon(Icons.Filled.Settings,null,tint=Color.White)}
                 }
                 Spacer(Modifier.height(18.dp))
                 tiles.chunked(4).forEach { row ->
