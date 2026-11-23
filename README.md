@@ -1,4 +1,4 @@
-# Nal Vault
+# Kavach Vault
 
 Offline AES-256 vault for Android. Files are encrypted with a key derived from your master
 password (PBKDF2, 120,000 iterations); the key is never written to disk. The index - names,
@@ -14,5 +14,5 @@ sizes and folders - is encrypted with the same key.
 
 ## Build
 
-Push to GitHub, then run the **Build Nal Vault** workflow (Actions tab) and download the
+Push to GitHub, then run the **Build Kavach Vault** workflow (Actions tab) and download the
 `nal-vault-apk` artifact.
